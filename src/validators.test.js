@@ -1,4 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
+import { validateSlug } from "./validators";
 
 describe("validators", () => {
     describe("validateSlug", () => {
