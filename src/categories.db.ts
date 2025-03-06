@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
+import xss from 'xss';
 
 const CategorySchema = z.object({
   id: z.number(),
@@ -20,54 +21,65 @@ const CategoryToCreateSchema = z.object({
 type Category = z.infer<typeof CategorySchema>;
 type CategoryToCreate = z.infer<typeof CategoryToCreateSchema>;
 
-const mockCategories: Array<Category> = [
-  {
-    id: 1,
-    slug: 'html',
-    title: 'HTML',
-  },
-  {
-    id: 2,
-    slug: 'css',
-    title: 'CSS',
-  },
-  {
-    id: 3,
-    slug: 'js',
-    title: 'JavaScript',
-  },
-];
+export function validateCategory(category: unknown): z.SafeParseReturnType< CategoryToCreate, CategoryToCreate > {
+  return CategoryToCreateSchema.safeParse(category);
+}
 
 const prisma = new PrismaClient();
 
-export async function getCategories(
-  limit: number = 10,
-  offset: number = 0,
-): Promise<Array<Category>> {
+export async function getCategories(): Promise<Array<Category>> {
   const categories = await prisma.categories.findMany();
-  console.log('categories :>> ', categories);
   return categories;
 }
 
-export function getCategory(slug: string): Category | null {
-  const cat = mockCategories.find((c) => c.slug === slug);
+export async function getCategory(slug: string): Promise<Category | null> {
+  const cat = await prisma.categories.findUnique({
+    where: {
+      slug: slug
+    }
+  });
 
   return cat ?? null;
 }
 
-export function validateCategory(categoryToValidate: unknown) {
-  const result = CategoryToCreateSchema.safeParse(categoryToValidate);
-
-  return result;
-}
-
-export async function createCategory(categoryToCreate: CategoryToCreate): Promise<Category> {
-  const createdCategory = await prisma.categories.create({
-    data: {
-      title: categoryToCreate.title,
-      slug: categoryToCreate.title.toLowerCase().replace(' ', '-'),
-    },
-  });
+export async function createCategory(categoryToCreate: CategoryToCreate): Promise<Category | null> {
+  let createdCategory;
+  try {
+    createdCategory = await prisma.categories.create({
+      data: {
+        title: xss(categoryToCreate.title),
+        slug: xss(categoryToCreate.title).toLowerCase().replaceAll(' ', '-'),
+      },
+    });
+  } catch {
+    return null;
+  }
 
   return createdCategory;
+}
+
+export async function updateCategory(categoryToCreate: CategoryToCreate, slug: string): Promise<Category | null> {
+  const category = await getCategory(slug);
+  if (!category) return null;
+  const updatedCategory = await prisma.categories.update({
+    where: {
+      slug,
+    },
+    data: {
+      title: xss(categoryToCreate.title),
+      slug: xss(categoryToCreate.title).toLowerCase().replaceAll(' ', '-')
+    }
+  })
+
+  return updatedCategory;
+}
+
+export async function deleteCategory(slug: string): Promise<Category | null> {
+  const result = await prisma.categories.delete({
+    where: {
+      slug,
+    }
+  })
+
+  return result ?? null;
 }
